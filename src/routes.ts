@@ -52,6 +52,8 @@ export async function appRoutes(app: FastifyInstance) {
     const parsedDate = dayjs(date).startOf("day");
     const weekDay = parsedDate.get("day");
 
+    console.log(date, weekDay);
+
     /**
      * os hábitos possíveis
        hábitos que já foram completados
@@ -69,8 +71,23 @@ export async function appRoutes(app: FastifyInstance) {
       },
     });
 
+    // Detalhe do dia
+    const day = await prisma.day.findUnique({
+      where: {
+        date: parsedDate.toDate(),
+      },
+      include: {
+        dayHabits: true,
+      },
+    });
+
+    const completedHabits = day?.dayHabits.map((dayHabit) => {
+      return dayHabit.habit_id;
+    });
+
     return {
       possibleHabits,
+      completedHabits,
     };
   });
 }
