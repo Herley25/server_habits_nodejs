@@ -90,4 +90,93 @@ export async function appRoutes(app: FastifyInstance) {
       completedHabits,
     };
   });
+
+  // Completar e não completar um hábito
+  app.patch("/habits/:id/toggle", async (request) => {
+    // route params => parâmetro de identificação
+    const toggleHabitParams = z.object({
+      id: z.string().uuid(),
+    });
+
+    const { id } = toggleHabitParams.parse(request.params);
+
+    // Acompanhamento diário de hábitos
+    const today = dayjs().startOf("day").toDate();
+
+    let day = await prisma.day.findUnique({
+      where: {
+        date: today,
+      },
+    });
+    // se o dia não estiver registrado no banco
+    if (!day) {
+      day = await prisma.day.create({
+        data: {
+          date: today,
+        },
+      });
+    }
+
+    const dayHabit = await prisma.dayHabit.findUnique({
+      where: {
+        day_id_habit_id: {
+          day_id: day.id,
+          habit_id: id,
+        },
+      },
+    });
+
+    // se o registro esteja no banco de dados
+    if (dayHabit) {
+      // remover a marcação de completo
+      await prisma.dayHabit.delete({
+        where: {
+          id: dayHabit.id,
+        },
+      });
+    } else {
+      // serve para completar o hábito no dia atual
+      await prisma.dayHabit.create({
+        data: {
+          day_id: day.id,
+          habit_id: id,
+        },
+      });
+    }
+  });
+
+  app.get("/summary", async () => {
+    /**
+     * Query mais complexas, mais consições, relacionamentos => SQL na mão (RAW)
+     * Prisma ORM: RAW SQL => SQLite
+     * retornar uma lista, data, dia, quantos hábitos eram possíveis de completar nesta data
+     * e quantos hábitos eu consigo terminar neste dia
+     */
+
+    const summary = await prisma.$queryRaw`
+      SELECT
+        D.id,
+        D.date,
+        (
+          SELECT
+            cast(count(*) as float)
+          FROM day_habits DH
+          WHERE DH.day_id = D.id
+        ) as completed,
+        (
+          SELECT
+            cast(count(*) as float)
+          FROM habit_week_days HWD
+          JOIN habits H
+            ON H.id = HWD.habit_id
+          WHERE
+            HWD.week_day = cast(strftime('%w', D.date/1000.0, 'unixepoch') as int)
+            AND H.create_at <= D.date
+        ) as amount
+      FROM days D
+    `;
+
+    // Epoch converter formato que o SQLite guarda
+    return summary;
+  });
 }
