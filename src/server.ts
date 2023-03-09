@@ -23,6 +23,7 @@ app.register(appRoutes);
 
 app
   .listen({
+    // host: "000.000.00.0",
     port: 3333,
   })
   .then(() => {
